@@ -1,11 +1,11 @@
 use env_logger;
 use log;
-use notify::event::ModifyKind;
-use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{event::ModifyKind, Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Deserialize;
-use std::fs;
-use std::path::Path;
+use std::{fs, path::Path};
 use toml;
+
+mod path_expander;
 
 #[derive(Deserialize, Debug)]
 struct AppConfig {
@@ -28,10 +28,22 @@ fn main() {
 
     if let Ok(config) = extract_config(&args) {
         log::info!("Config loaded successfully: {:?}", config);
-        let expanded_root = shellexpand::tilde(&config.workspace.root).into_owned();
-        log::info!("Expanded root path to watch: {}", expanded_root);
-        if let Err(error) = watch(Path::new(&expanded_root)) {
-            log::error!("Error setting up file watcher: {error:?}");
+        let root_path = Path::new(&config.workspace.root);
+        match path_expander::expand_tilde(root_path) {
+            Some(expanded_cow) => {
+                let expanded_root: &Path = expanded_cow.as_ref();
+                log::info!("Expanded root path to watch: {:?}", expanded_root);
+                if let Err(error) = watch(expanded_root) {
+                    log::error!("Error setting up file watcher: {error:?}");
+                }
+            }
+            None => {
+                log::error!(
+                    "Failed to expand home directory for path '{}'. Check HOME/USERPROFILE env var.",
+                    config.workspace.root
+                );
+                return;
+            }
         }
     } else {
         log::error!("Failed to load or parse config file: {}", args);
@@ -70,9 +82,15 @@ fn watch(path: &Path) -> notify::Result<()> {
         match res {
             Ok(event) => {
                 match event.kind {
-                    EventKind::Create(_) => {create_callback(&event);},
-                    EventKind::Remove(_) => {remove_callback(&event);},
-                    EventKind::Modify(_) => {modify_callback(&event);},
+                    EventKind::Create(_) => {
+                        create_callback(&event);
+                    }
+                    EventKind::Remove(_) => {
+                        remove_callback(&event);
+                    }
+                    EventKind::Modify(_) => {
+                        modify_callback(&event);
+                    }
                     // EventKind::Access(_) => {access_callback(&event);},
                     // _ => {other_event_callback(&event);}
                     _ => {}
@@ -108,14 +126,14 @@ fn modify_callback(event: &Event) {
         } else {
             // Likely RenameMode::From or RenameMode::To (separate events)
             for path in &event.paths {
-                 log::info!("   -> Modified Part: {}", path.display());
+                log::info!("   -> Modified Part: {}", path.display());
             }
         }
     } else {
         // Other modifications (data, metadata)
         for path in &event.paths {
-             // Usually just one path for Data/Metadata changes
-             log::info!("   -> Edited: {}", path.display());
+            // Usually just one path for Data/Metadata changes
+            log::info!("   -> Edited: {}", path.display());
         }
     }
 }

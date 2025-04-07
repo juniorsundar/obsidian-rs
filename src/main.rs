@@ -1,6 +1,7 @@
 use env_logger;
 use log;
-use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::event::ModifyKind;
+use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
@@ -13,9 +14,9 @@ struct AppConfig {
 
 #[derive(Deserialize, Debug)]
 struct Workspace {
-    name: String,
+    // name: String,
     root: String,
-    port: u16,
+    // port: u16,
 }
 
 fn main() {
@@ -67,10 +68,84 @@ fn watch(path: &Path) -> notify::Result<()> {
 
     for res in rx {
         match res {
-            Ok(event) => log::info!("Change: {event:?}"),
+            Ok(event) => {
+                match event.kind {
+                    EventKind::Create(_) => {create_callback(&event);},
+                    EventKind::Remove(_) => {remove_callback(&event);},
+                    EventKind::Modify(_) => {modify_callback(&event);},
+                    // EventKind::Access(_) => {access_callback(&event);},
+                    // _ => {other_event_callback(&event);}
+                    _ => {}
+                };
+            }
             Err(error) => log::error!("Error: {error:?}"),
         }
     }
 
     Ok(())
 }
+
+fn create_callback(event: &Event) {
+    log::info!("--- Create Event ---");
+    log::info!("  Paths involved: {}", event.paths.len());
+    for path in &event.paths {
+        // Usually just one path for Create
+        log::info!("   -> Created: {}", path.display());
+    }
+}
+
+fn modify_callback(event: &Event) {
+    log::info!("--- Modify Event ---");
+    log::info!("  Paths involved: {}", event.paths.len());
+
+    // Check specifically for rename events if you want different logging
+    if matches!(event.kind, EventKind::Modify(ModifyKind::Name(_))) {
+        if event.paths.len() == 2 {
+            // Likely RenameMode::Both (source and destination)
+            // Note: notify doesn't guarantee the order of paths[0] and paths[1]
+            log::info!("   -> Renamed/Moved From: {}", event.paths[0].display());
+            log::info!("   -> Renamed/Moved To:   {}", event.paths[1].display());
+        } else {
+            // Likely RenameMode::From or RenameMode::To (separate events)
+            for path in &event.paths {
+                 log::info!("   -> Modified Part: {}", path.display());
+            }
+        }
+    } else {
+        // Other modifications (data, metadata)
+        for path in &event.paths {
+             // Usually just one path for Data/Metadata changes
+             log::info!("   -> Edited: {}", path.display());
+        }
+    }
+}
+
+fn remove_callback(event: &Event) {
+    log::info!("--- Remove Event ---");
+    log::info!("  Paths involved: {}", event.paths.len());
+    for path in &event.paths {
+        // Usually just one path for Remove
+        log::info!("   -> Removed: {}", path.display());
+    }
+}
+
+// fn access_callback(event: &Event) {
+//     log::info!("--- Access Event ---");
+//     log::info!("  Paths involved: {}", event.paths.len());
+//     for path in &event.paths {
+//          // Usually just one path for Access
+//          log::info!("   -> Accessed: {}", path.display());
+//     }
+// }
+
+// fn other_event_callback(event: &Event) {
+//     // Catch-all for Any or Other kinds
+//     log::info!("--- Other/Unknown Event ---");
+//     log::info!("  Kind: {:?}", event.kind);
+//     log::info!("  Paths involved: {}", event.paths.len());
+//      for path in &event.paths {
+//         log::info!("   -> Path: {}", path.display());
+//     }
+//      log::info!("  Attributes: {:?}", event.attrs);
+//
+// }

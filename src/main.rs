@@ -1,20 +1,16 @@
-use log;
 use notify::{
-    Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher, event::ModifyKind,
+    Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Result as NotifyResult, Watcher,
+    event::ModifyKind,
 };
-use std::{
-    borrow::Cow,
-    error::Error,
-    path::Path,
-    sync::mpsc::Receiver,
-};
+use std::{borrow::Cow, error::Error, path::Path, sync::mpsc::Receiver};
 
 mod config;
 use crate::config::AppConfig;
 
-fn watch_setup(
-    path: &Path,
-) -> notify::Result<(RecommendedWatcher, Receiver<notify::Result<Event>>)> {
+type WatchEventReceiver = Receiver<NotifyResult<Event>>;
+type WatcherSetup = (RecommendedWatcher, WatchEventReceiver);
+type WatcherInitResult = Result<WatcherSetup, Box<dyn Error>>;
+fn watcher_setup(path: &Path) -> notify::Result<WatcherSetup> {
     let (tx, rx) = std::sync::mpsc::channel();
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
 
@@ -26,9 +22,9 @@ fn watch_setup(
     Ok((watcher, rx))
 }
 
-fn initialize_watcher() -> Result<(RecommendedWatcher, Receiver<notify::Result<Event>>), Box<dyn Error>> {
+fn initialize_watcher() -> WatcherInitResult {
     // 1. Get config path (Uses config::get_config)
-    let config_path = config::get_config().ok_or("Failed to expand config_path!")?;
+    let config_path = config::get_config().ok_or("Failed to expand config path!")?;
 
     // 2. Extract config (Uses config::extract_config)
     let config: AppConfig = config::extract_config(&config_path)?;
@@ -46,15 +42,18 @@ fn initialize_watcher() -> Result<(RecommendedWatcher, Receiver<notify::Result<E
     log::info!("Expanded root path to watch: {:?}", expanded_root);
 
     // 4. Set up the file watcher by calling the modified function
-    let (watcher, rx) = watch_setup(expanded_root).map_err(|e| Box::new(e) as Box<dyn Error>)?;
+    let (watcher, rx) = watcher_setup(expanded_root).map_err(|e| Box::new(e) as Box<dyn Error>)?;
     log::info!("Successfully watching path: {:?}", expanded_root);
 
     Ok((watcher, rx))
 }
 
 fn main() {
-    // simple_logger::init_with_level(log::Level::Info).expect("Failed to initialize logger");
-    simple_logger::init_with_env().unwrap();
+    env_logger::init_from_env(
+        env_logger::Env::new()
+            .filter("RUST_LOG")
+            .write_style("LOG_STYLE"),
+    );
 
     match initialize_watcher() {
         Ok((_watcher, rx)) => {

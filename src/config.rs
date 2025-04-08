@@ -1,4 +1,3 @@
-use log;
 use serde::Deserialize;
 use std::{
     borrow::Cow,
@@ -7,7 +6,6 @@ use std::{
     fs, io,
     path::{Path, PathBuf},
 };
-use toml;
 
 #[derive(Deserialize, Debug)]
 pub struct AppConfig {

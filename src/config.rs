@@ -37,7 +37,7 @@ fn get_home_dir() -> Option<PathBuf> {
     }
 }
 
-pub fn get_config() -> Option<String> {
+pub fn get_config_path() -> Option<String> {
     if let Some(config_path_cow) = expand_tilde(Path::new(DEFAULT_CONFIG_PATH)) {
         config_path_cow.to_str().map(String::from)
     } else {
@@ -67,20 +67,7 @@ pub fn extract_config(config_path_str: &String) -> Result<AppConfig, Box<dyn Err
 }
 
 /// Expands a path starting with '\~' to the user's home directory.
-///
-/// Returns `None` if the path starts with '\~\' but the home directory
-/// cannot be determined.
-/// Returns `Some(Cow::Borrowed(input_path))` if the path doesn't start with '\~'.
-/// Returns `Some(Cow::Owned(expanded_path))` if expansion occurred.
-///
-/// Note: This implementation relies on HOME (Unix) or USERPROFILE (Windows)
-/// environment variables and does not cover all edge cases handled by
-/// crates like `shellexpand` or `home`. Assumes UTF-8 path representation
-/// for the '~' check.
 pub fn expand_tilde(input_path: &Path) -> Option<Cow<Path>> {
-    // Attempt to convert the Path to a &str to check for '~'.
-    // If the path is not valid UTF-8, we cannot reliably check for '~',
-    // so we return the original path without attempting expansion.
     let path_str = match input_path.to_str() {
         Some(s) => s,
         None => return Some(Cow::Borrowed(input_path)), // Not UTF-8, return original
@@ -103,7 +90,7 @@ pub fn expand_tilde(input_path: &Path) -> Option<Cow<Path>> {
     }
 }
 
-// --- Unit tests (optional but recommended) ---
+
 #[cfg(test)]
 mod tests {
     use super::*;

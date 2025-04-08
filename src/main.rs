@@ -1,106 +1,82 @@
-use env_logger;
 use log;
-use notify::{event::ModifyKind, Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use serde::Deserialize;
-use std::{fs, path::Path};
-use toml;
+use notify::{
+    Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher, event::ModifyKind,
+};
+use std::{
+    borrow::Cow,
+    error::Error,
+    path::Path,
+    sync::mpsc::Receiver,
+};
 
-mod path_expander;
+mod config;
+use crate::config::AppConfig;
 
-#[derive(Deserialize, Debug)]
-struct AppConfig {
-    workspace: Workspace,
-}
-
-#[derive(Deserialize, Debug)]
-struct Workspace {
-    // name: String,
-    root: String,
-    // port: u16,
-}
-
-fn main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-
-    let args = std::env::args()
-        .nth(1)
-        .expect("Argument 1 needs to be a path");
-
-    if let Ok(config) = extract_config(&args) {
-        log::info!("Config loaded successfully: {:?}", config);
-        let root_path = Path::new(&config.workspace.root);
-        match path_expander::expand_tilde(root_path) {
-            Some(expanded_cow) => {
-                let expanded_root: &Path = expanded_cow.as_ref();
-                log::info!("Expanded root path to watch: {:?}", expanded_root);
-                if let Err(error) = watch(expanded_root) {
-                    log::error!("Error setting up file watcher: {error:?}");
-                }
-            }
-            None => {
-                log::error!(
-                    "Failed to expand home directory for path '{}'. Check HOME/USERPROFILE env var.",
-                    config.workspace.root
-                );
-                return;
-            }
-        }
-    } else {
-        log::error!("Failed to load or parse config file: {}", args);
-    }
-}
-
-fn extract_config(args: &String) -> Result<AppConfig, Box<dyn std::error::Error>> {
-    let config_path = String::from(args);
-    let config_content = fs::read_to_string(Path::new(&config_path))?;
-
-    log::debug!("Read config content: {}", config_content);
-
-    let config: AppConfig = toml::from_str(&config_content)?;
-    Ok(config)
-}
-
-fn watch(path: &Path) -> notify::Result<()> {
+fn watch_setup(
+    path: &Path,
+) -> notify::Result<(RecommendedWatcher, Receiver<notify::Result<Event>>)> {
     let (tx, rx) = std::sync::mpsc::channel();
-
-    // Automatically select the best implementation for your platform.
-    // You can also access each implementation directly e.g. INotifyWatcher.
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
 
-    //
     if !path.exists() {
         log::error!("Path does not exist or is not accessible: {:?}", path);
         return Err(notify::Error::path_not_found());
     }
-
-    // Add a path to be watched. All files and directories at that path and
-    // below will be monitored for changes.
     watcher.watch(path, RecursiveMode::Recursive)?;
-    log::info!("Successfully watching path: {:?}", path);
+    Ok((watcher, rx))
+}
 
-    for res in rx {
-        match res {
-            Ok(event) => {
-                match event.kind {
-                    EventKind::Create(_) => {
-                        create_callback(&event);
-                    }
-                    EventKind::Remove(_) => {
-                        remove_callback(&event);
-                    }
-                    EventKind::Modify(_) => {
-                        modify_callback(&event);
-                    }
-                    // EventKind::Access(_) => {access_callback(&event);},
-                    // _ => {other_event_callback(&event);}
-                    _ => {}
-                };
+fn initialize_watcher() -> Result<(RecommendedWatcher, Receiver<notify::Result<Event>>), Box<dyn Error>> {
+    // 1. Get config path (Uses config::get_config)
+    let config_path = config::get_config().ok_or("Failed to expand config_path!")?;
+
+    // 2. Extract config (Uses config::extract_config)
+    let config: AppConfig = config::extract_config(&config_path)?;
+    log::info!("Config loaded successfully: {:?}", config);
+
+    // 3. Expand tilde path (Uses config::expand_tilde)
+    let root_path = Path::new(&config.workspace.root);
+    let expanded_cow: Cow<'_, Path> = config::expand_tilde(root_path).ok_or_else(|| {
+        format!(
+            "Failed to expand home directory for path '{}'. Check HOME/USERPROFILE env var.",
+            config.workspace.root // Access workspace.root from the loaded config
+        )
+    })?;
+    let expanded_root: &Path = expanded_cow.as_ref();
+    log::info!("Expanded root path to watch: {:?}", expanded_root);
+
+    // 4. Set up the file watcher by calling the modified function
+    let (watcher, rx) = watch_setup(expanded_root).map_err(|e| Box::new(e) as Box<dyn Error>)?;
+    log::info!("Successfully watching path: {:?}", expanded_root);
+
+    Ok((watcher, rx))
+}
+
+fn main() {
+    // simple_logger::init_with_level(log::Level::Info).expect("Failed to initialize logger");
+    simple_logger::init_with_env().unwrap();
+
+    match initialize_watcher() {
+        Ok((_watcher, rx)) => {
+            log::info!("Watcher initialized successfully. Waiting for events...");
+            for res in rx {
+                match res {
+                    Ok(event) => match event.kind {
+                        EventKind::Create(_) => create_callback(&event),
+                        EventKind::Remove(_) => remove_callback(&event),
+                        EventKind::Modify(_) => modify_callback(&event),
+                        _ => {}
+                    },
+                    Err(error) => log::error!("Error receiving file event: {error:?}"),
+                }
             }
-            Err(error) => log::error!("Error: {error:?}"),
+            log::info!("Event loop finished.");
+        }
+        Err(e) => {
+            log::error!("Failed to initialize watcher: {}", e);
+            std::process::exit(1);
         }
     }
-
-    Ok(())
 }
 
 fn create_callback(event: &Event) {

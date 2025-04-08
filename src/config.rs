@@ -1,6 +1,27 @@
-use std::borrow::Cow;
-use std::env;
-use std::path::{Path, PathBuf}; // To avoid allocation when no expansion happens
+use log;
+use serde::Deserialize;
+use std::{
+    borrow::Cow,
+    env,
+    error::Error,
+    fs, io,
+    path::{Path, PathBuf},
+};
+use toml;
+
+#[derive(Deserialize, Debug)]
+pub struct AppConfig {
+    pub workspace: Workspace,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Workspace {
+    // name: String,
+    pub root: String,
+    // port: u16,
+}
+
+static DEFAULT_CONFIG_PATH: &str = "~/.config/obsidian-rs/config.toml";
 
 // Helper function to get the home directory path based on OS
 fn get_home_dir() -> Option<PathBuf> {
@@ -14,10 +35,37 @@ fn get_home_dir() -> Option<PathBuf> {
     }
     #[cfg(not(any(unix, windows)))]
     {
-        // Basic fallback or unsupported platform marker
-        // You might choose to handle other env vars if needed
         None
     }
+}
+
+pub fn get_config() -> Option<String> {
+    if let Some(config_path_cow) = expand_tilde(Path::new(DEFAULT_CONFIG_PATH)) {
+        config_path_cow.to_str().map(String::from)
+    } else {
+        None
+    }
+}
+
+pub fn extract_config(config_path_str: &String) -> Result<AppConfig, Box<dyn Error>> {
+    let config_path = Path::new(config_path_str);
+
+    let config_content = fs::read_to_string(config_path).map_err(|io_error| -> Box<dyn Error> {
+        if io_error.kind() == io::ErrorKind::NotFound {
+            let config_not_found_error = format!(
+                "Configuration file not found at path: {}",
+                config_path.display()
+            );
+            Box::from(config_not_found_error)
+        } else {
+            Box::new(io_error)
+        }
+    })?;
+
+    log::debug!("Read config content: {}", config_content);
+
+    let config: AppConfig = toml::from_str(&config_content)?;
+    Ok(config)
 }
 
 /// Expands a path starting with '\~' to the user's home directory.

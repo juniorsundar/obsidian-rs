@@ -2,7 +2,7 @@ use notify::{
     Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Result as NotifyResult, Watcher,
     event::ModifyKind,
 };
-use std::{borrow::Cow, error::Error, path::Path, sync::mpsc::Receiver};
+use std::{error::Error, path::Path, sync::mpsc::Receiver};
 
 use crate::config;
 
@@ -22,27 +22,14 @@ pub fn watcher_setup(path: &Path) -> notify::Result<WatcherSetup> {
 }
 
 pub fn initialize_watcher() -> WatcherInitResult {
-    // 1. Get config path (Uses config::get_config)
-    let config_path = config::get_config_path().ok_or("Failed to expand config path!")?;
-
-    // 2. Extract config (Uses config::extract_config)
-    let config: config::AppConfig = config::extract_config(&config_path)?;
+    let config: config::AppConfig = config::extract_config()?;
     log::info!("Config loaded successfully: {:?}", config);
 
-    // 3. Expand tilde path (Uses config::expand_tilde)
-    let root_path = Path::new(&config.workspace.root);
-    let expanded_cow: Cow<'_, Path> = config::expand_tilde(root_path).ok_or_else(|| {
-        format!(
-            "Failed to expand home directory for path '{}'. Check HOME/USERPROFILE env var.",
-            config.workspace.root // Access workspace.root from the loaded config
-        )
-    })?;
-    let expanded_root: &Path = expanded_cow.as_ref();
-    log::info!("Expanded root path to watch: {:?}", expanded_root);
-
-    // 4. Set up the file watcher by calling the modified function
-    let (watcher, rx) = watcher_setup(expanded_root).map_err(|e| Box::new(e) as Box<dyn Error>)?;
-    log::info!("Successfully watching path: {:?}", expanded_root);
+    let root_workspace_path =
+        config::get_root_workspace_path(&config).ok_or("Failed to get Root Workspace Path from Config.")?;
+    let (watcher, rx) =
+        watcher_setup(&root_workspace_path.as_path()).map_err(|e| Box::new(e) as Box<dyn Error>)?;
+    log::info!("Successfully watching path: {:?}", root_workspace_path);
 
     Ok((watcher, rx))
 }

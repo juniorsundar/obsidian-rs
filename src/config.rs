@@ -37,7 +37,7 @@ fn get_home_dir() -> Option<PathBuf> {
     }
 }
 
-pub fn get_config_path() -> Option<String> {
+fn get_config_path() -> Option<String> {
     if let Some(config_path_cow) = expand_tilde(Path::new(DEFAULT_CONFIG_PATH)) {
         config_path_cow.to_str().map(String::from)
     } else {
@@ -45,8 +45,14 @@ pub fn get_config_path() -> Option<String> {
     }
 }
 
-pub fn extract_config(config_path_str: &String) -> Result<AppConfig, Box<dyn Error>> {
-    let config_path = Path::new(config_path_str);
+pub fn get_root_workspace_path(config: &AppConfig) -> Option<PathBuf> {
+    let root_path = Path::new(&config.workspace.root);
+    expand_tilde(root_path).map(|expanded_cow| expanded_cow.into_owned()) // Convert Cow -> PathBuf
+}
+
+pub fn extract_config() -> Result<AppConfig, Box<dyn Error>> {
+    let config_path_str = get_config_path().ok_or("Failed to expand config path!")?;
+    let config_path = Path::new(&config_path_str);
 
     let config_content = fs::read_to_string(config_path).map_err(|io_error| -> Box<dyn Error> {
         if io_error.kind() == io::ErrorKind::NotFound {
@@ -67,7 +73,7 @@ pub fn extract_config(config_path_str: &String) -> Result<AppConfig, Box<dyn Err
 }
 
 /// Expands a path starting with '\~' to the user's home directory.
-pub fn expand_tilde(input_path: &Path) -> Option<Cow<Path>> {
+fn expand_tilde(input_path: &Path) -> Option<Cow<Path>> {
     let path_str = match input_path.to_str() {
         Some(s) => s,
         None => return Some(Cow::Borrowed(input_path)), // Not UTF-8, return original
@@ -89,7 +95,6 @@ pub fn expand_tilde(input_path: &Path) -> Option<Cow<Path>> {
         Some(Cow::Borrowed(input_path))
     }
 }
-
 
 #[cfg(test)]
 mod tests {

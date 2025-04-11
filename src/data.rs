@@ -1,6 +1,10 @@
 use crate::config::{self, AppConfig};
 use crate::util;
-use std::{env, error::Error, path::PathBuf};
+
+use serde::Deserialize;
+use std::thread::current;
+use std::{env, error::Error, path::{PathBuf, Path}};
+use walkdir::{DirEntry, WalkDir};
 
 fn get_local_data_dir() -> Option<PathBuf> {
     #[cfg(windows)]
@@ -57,6 +61,49 @@ fn get_data_path() -> Result<PathBuf, Box<dyn Error>> {
     Ok(data_path)
 }
 
+#[derive(Deserialize, Debug)]
+pub struct NodeData {
+    pub file_path: Option<PathBuf>,
+    pub front_matter: Option<FrontMatter>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FrontMatter {
+    pub title: Option<String>,
+    pub created: Option<String>,
+    pub tags: Option<Vec<String>>,
+}
+
+fn is_hidden(entry: &DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .map(|s| s.starts_with("."))
+        .unwrap_or(false)
+}
+
+pub fn traverse_vault(vault_path: &Path) -> Result<(), Box<dyn Error>> {
+    let walker = WalkDir::new(vault_path).into_iter();
+
+    for entry in walker.filter_entry(|e| !is_hidden(e)) {
+        let current_entry = entry?;
+        let path_to_current_entry = current_entry.path();
+
+        if !path_to_current_entry.is_file() {
+            continue;
+        } 
+
+        log::info!("{}", current_entry.path().display());
+
+        if !exists_in_cache(path_to_current_entry) {
+            add_to_cache(path_to_current_entry)?;
+        } else {
+            update_in_cache(path_to_current_entry)?;
+        }
+    }
+    Ok(())
+}
+
 /// Extract yaml front matter of provided file and store as struct
 fn parse_yaml_front_matter() {}
 
@@ -70,13 +117,19 @@ fn build_cache() {}
 fn invalidate_cache() {}
 
 /// Exists in cache?
-fn exists_in_cache() {}
+fn exists_in_cache(entry: &Path) -> bool {
+    true
+}
 
 /// Add entry to cache
-fn add_to_cache() {}
+fn add_to_cache(entry: &Path) -> Result<(), Box<dyn Error>> {
+    Ok(())
+}
 
 /// Remove entry from cache
 fn remove_from_cache() {}
 
 /// Update entry in cache
-fn update_in_cache() {}
+fn update_in_cache(entry: &Path) -> Result<(), Box<dyn Error>>{
+    Ok(())
+}

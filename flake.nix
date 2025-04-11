@@ -23,6 +23,7 @@
             clang
             llvmPackages.bintools
             rustup
+            bacon
           ];
 
           RUSTC_VERSION = overrides.toolchain.channel;

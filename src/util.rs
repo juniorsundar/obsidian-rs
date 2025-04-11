@@ -44,7 +44,6 @@ pub fn expand_tilde(input_path: &Path) -> Option<Cow<Path>> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

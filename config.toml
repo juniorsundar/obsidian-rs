@@ -1,4 +1,0 @@
-[workspace]
-name = "vault"
-root = "~/Dropbox/obsidian/vault"
-port = 8080

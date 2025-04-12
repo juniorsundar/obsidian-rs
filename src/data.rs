@@ -2,9 +2,10 @@ use crate::config::{self, AppConfig};
 use crate::util;
 
 use serde::Deserialize;
-use std::thread::current;
 use std::{env, error::Error, path::{PathBuf, Path}};
 use walkdir::{DirEntry, WalkDir};
+
+static DEFAULT_DATA_DIR: &str = "obsidian-rs";
 
 fn get_local_data_dir() -> Option<PathBuf> {
     #[cfg(windows)]
@@ -33,8 +34,7 @@ fn get_local_data_dir() -> Option<PathBuf> {
     }
 }
 
-fn get_data_path() -> Result<PathBuf, Box<dyn Error>> {
-    let config: AppConfig = config::extract_config()?;
+pub fn get_data_path(config: &AppConfig) -> Result<PathBuf, Box<dyn Error>> {
     let mut data_path = get_local_data_dir()
         .ok_or_else(|| -> Box<dyn Error> { Box::from("Local data folder not found.") })?;
     let root_workspace_path = config::get_root_workspace_path(&config)
@@ -56,6 +56,7 @@ fn get_data_path() -> Result<PathBuf, Box<dyn Error>> {
         ))
     })?;
 
+    data_path.push(DEFAULT_DATA_DIR);
     data_path.push(vault_name);
 
     Ok(data_path)
@@ -82,8 +83,9 @@ fn is_hidden(entry: &DirEntry) -> bool {
         .unwrap_or(false)
 }
 
-pub fn traverse_vault(vault_path: &Path) -> Result<(), Box<dyn Error>> {
+pub fn traverse_vault(vault_path: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     let walker = WalkDir::new(vault_path).into_iter();
+    let mut files = Vec::<PathBuf>::new();
 
     for entry in walker.filter_entry(|e| !is_hidden(e)) {
         let current_entry = entry?;
@@ -92,16 +94,10 @@ pub fn traverse_vault(vault_path: &Path) -> Result<(), Box<dyn Error>> {
         if !path_to_current_entry.is_file() {
             continue;
         } 
-
-        log::info!("{}", current_entry.path().display());
-
-        if !exists_in_cache(path_to_current_entry) {
-            add_to_cache(path_to_current_entry)?;
-        } else {
-            update_in_cache(path_to_current_entry)?;
-        }
+        files.push(path_to_current_entry.to_path_buf());
+        log::debug!("{}", current_entry.path().display());
     }
-    Ok(())
+    Ok(files)
 }
 
 /// Extract yaml front matter of provided file and store as struct
@@ -114,7 +110,16 @@ fn cache_exists() {}
 fn build_cache() {}
 
 /// Parse through entries in database to see if all are present
-fn invalidate_cache() {}
+pub fn invalidate_cache(nodes: &Vec<PathBuf>) -> Result<(), Box<dyn Error>> {
+    for node in nodes {
+        if !exists_in_cache(node) {
+            add_to_cache(node)?;
+        } else {
+            update_in_cache(node)?;
+        }
+    }
+    Ok(())
+}
 
 /// Exists in cache?
 fn exists_in_cache(entry: &Path) -> bool {

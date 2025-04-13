@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     env,
-    path::{Path, PathBuf},
+    path::{Path, PathBuf, StripPrefixError},
 };
 
 // Helper function to get the home directory path based on OS
@@ -18,6 +18,12 @@ pub fn get_home_dir() -> Option<PathBuf> {
     {
         None
     }
+}
+
+pub fn get_relative_path(full_path: &Path, base_path: &Path) -> Result<PathBuf, StripPrefixError> {
+    // Attempt to strip the base_path prefix from the full_path
+    full_path.strip_prefix(base_path)
+        .map(|relative_path_slice| relative_path_slice.to_path_buf()) // Convert Ok(&Path) to Ok(PathBuf)
 }
 
 /// Expands a path starting with '\~' to the user's home directory.

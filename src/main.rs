@@ -1,3 +1,5 @@
+use std::fs;
+
 use config::AppConfig;
 
 mod config;
@@ -5,7 +7,9 @@ mod data;
 mod util;
 mod watcher;
 
-use rusqlite::{params, Connection, Result};
+use data::NodeData;
+use rusqlite::Connection;
+use util::get_relative_path;
 
 fn main() {
     env_logger::init_from_env(
@@ -26,19 +30,25 @@ fn main() {
         Err(e) => {
             log::error!("Problem retrieving data-path: {}", e);
             std::process::exit(1);
-        },
-        Ok(path) => { log::info!("{}", path.display()); path }
+        }
+        Ok(path) => {
+            log::info!("{}", path.display());
+            path
+        }
     };
 
+    match fs::create_dir_all(&data) {
+        Err(_) => {}
+        Ok(_) => {}
+    };
     data.push("cache.db3");
     let _conn = match Connection::open(data) {
         Err(e) => {
             log::error!("Problem creating database: {}", e);
             std::process::exit(1);
-        },
-        Ok(db) => db
+        }
+        Ok(db) => db,
     };
-
 
     // ------
 
@@ -65,6 +75,25 @@ fn main() {
         }
         _ => {}
     };
+
+    let mut nodes: Vec<NodeData> = Vec::new();
+    for file in vault_content {
+        match data::parse_yaml_front_matter(&file.as_path()) {
+            Err(_) => {}
+            Ok(fm_opt) => match fm_opt {
+                Some(fm) => {
+                    log::info!("{}", fm);
+                    let rel_path = get_relative_path(&file, &vault_path).unwrap();
+                    let node = NodeData {
+                        id: Some(rel_path),
+                        front_matter: Some(fm),
+                    };
+                    nodes.push(node);
+                }
+                None => {}
+            },
+        };
+    }
 
     // ------
 

@@ -7,8 +7,7 @@ use std::{
     error::Error,
     fmt,
     fs::File,
-    io::BufRead,
-    io::BufReader,
+    io::{BufRead, BufReader},
     path::{Path, PathBuf},
 };
 use walkdir::{DirEntry, WalkDir};

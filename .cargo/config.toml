@@ -1,0 +1,9 @@
+# --- CORRECT ---
+# File: /home/juniorsundar/Documents/Projects/obsidian-rs/.cargo/config.toml
+
+[target.x86_64-unknown-linux-musl]
+# Define keys directly under the target table header
+linker = "clang"
+# cc = ["clang"]
+# ar = "llvm-ar" # Add if needed
+# Add other target-specific settings here if required

@@ -1,15 +1,13 @@
-use std::fs;
-
-use config::AppConfig;
-
 mod config;
 mod data;
 mod util;
 mod watcher;
 
+use config::AppConfig;
 use data::NodeData;
+
+use std::fs;
 use rusqlite::Connection;
-use util::get_relative_path;
 
 fn main() {
     env_logger::init_from_env(
@@ -83,7 +81,7 @@ fn main() {
             Ok(fm_opt) => match fm_opt {
                 Some(fm) => {
                     log::info!("{}", fm);
-                    let rel_path = get_relative_path(&file, &vault_path).unwrap();
+                    let rel_path = util::get_relative_path(&file, &vault_path).unwrap();
                     let node = NodeData {
                         id: Some(rel_path),
                         front_matter: Some(fm),

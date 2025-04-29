@@ -80,12 +80,12 @@ fn main() {
             Err(_) => {}
             Ok(fm_opt) => match fm_opt {
                 Some(fm) => {
-                    log::info!("{}", fm);
                     let rel_path = util::get_relative_path(&file, &vault_path).unwrap();
                     let node = NodeData {
                         id: Some(rel_path),
                         front_matter: Some(fm),
                     };
+                    log::info!("{}", node);
                     nodes.push(node);
                 }
                 None => {}

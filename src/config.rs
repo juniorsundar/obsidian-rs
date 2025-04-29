@@ -1,3 +1,4 @@
+use home;
 use serde::Deserialize;
 use std::{
     error::Error,
@@ -19,14 +20,13 @@ pub struct Workspace {
     // port: u16,
 }
 
-static DEFAULT_CONFIG_PATH: &str = "~/.config/obsidian-rs/config.toml";
+static DEFAULT_CONFIG_PATH: &str = ".config/obsidian-rs/config.toml";
 
 fn get_config_path() -> Option<String> {
-    if let Some(config_path_cow) = util::expand_tilde(Path::new(DEFAULT_CONFIG_PATH)) {
-        config_path_cow.to_str().map(String::from)
-    } else {
-        None
-    }
+    let home_dir = home::home_dir()?;
+    let config_path = home_dir.join(DEFAULT_CONFIG_PATH);
+    let config_string = config_path.to_str()?;
+    Some(String::from(config_string))
 }
 
 pub fn get_root_workspace_path(config: &AppConfig) -> Option<PathBuf> {
@@ -54,4 +54,29 @@ pub fn extract_config() -> Result<AppConfig, Box<dyn Error>> {
 
     let config: AppConfig = toml::from_str(&config_content)?;
     Ok(config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_root_workspace_path() {
+        let config = AppConfig {
+            workspace: Workspace {
+                root: String::from("~/tmp/test"),
+            },
+        };
+        let result = get_root_workspace_path(&config);
+
+        let home_dir = home::home_dir().expect("Requires resolvable home dir.");
+        let expected_path = home_dir.join("tmp/test");
+
+        assert!(
+            result.is_some(),
+            "get_root_workspace_path should return Some"
+        );
+
+        assert_eq!(result.unwrap(), expected_path);
+    }
 }

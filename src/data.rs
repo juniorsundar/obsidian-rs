@@ -75,6 +75,24 @@ pub struct NodeData {
     pub front_matter: Option<FrontMatter>,
 }
 
+impl fmt::Display for NodeData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut output_parts = Vec::new();
+
+        if let Some(id) = &self.id {
+            if !id.exists() {
+                output_parts.push(format!("ID: {}", id.to_string_lossy()));
+            }
+        }
+
+        if let Some(front_matter) = &self.front_matter {
+            output_parts.push(format!("== Front Matter ==\n{}", front_matter));
+        }
+
+        write!(f, "{}", output_parts.join("\n"))
+    }
+}
+
 #[derive(Deserialize, Debug, Default)]
 pub struct FrontMatter {
     pub title: Option<String>,

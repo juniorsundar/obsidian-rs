@@ -39,11 +39,11 @@
           LIBCLANG_PATH = pkgs.lib.makeLibraryPath [pkgs.llvmPackages_latest.libclang.lib];
 
           shellHook = ''
-            export PATH=$PATH:''${CARGO_HOME:-~/.cargo}/bin
+                            export PATH=$PATH:''${CARGO_HOME:-~/.cargo}/bin
             # This next line seems particularly risky as it hardcodes the host toolchain path
             # export PATH=$PATH:''${RUSTUP_HOME:-~/.rustup}/toolchains/$RUSTC_VERSION-x86_64-unknown-linux-gnu/bin/
-            echo "Entered Nix development shell. Type 'exit' to leave."
-            zsh # Or remove this line if you want the default shell entry behavior
+                            echo "Entered Nix development shell. Type 'exit' to leave."
+                            zsh # Or remove this line if you want the default shell entry behavior
           '';
 
           # Add precompiled library to rustc search path

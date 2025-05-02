@@ -6,9 +6,6 @@ mod watcher;
 use config::AppConfig;
 use data::NodeData;
 
-use std::fs;
-use rusqlite::Connection;
-
 fn main() {
     env_logger::init_from_env(
         env_logger::Env::new()
@@ -24,7 +21,7 @@ fn main() {
         }
     };
 
-    let mut data = match data::get_data_path(&config) {
+    let data = match data::get_data_path(&config) {
         Err(e) => {
             log::error!("Problem retrieving data-path: {}", e);
             std::process::exit(1);
@@ -35,17 +32,14 @@ fn main() {
         }
     };
 
-    match fs::create_dir_all(&data) {
-        Err(_) => {}
-        Ok(_) => {}
-    };
-    data.push("cache.db3");
-    let _conn = match Connection::open(data) {
+    let cache = match data::get_cache(&data) {
         Err(e) => {
-            log::error!("Problem creating database: {}", e);
+            log::error!("Problem retrieving cache db: {}", e);
             std::process::exit(1);
         }
-        Ok(db) => db,
+        Ok(cache_conn) => {
+            cache_conn
+        }
     };
 
     // ------
@@ -66,7 +60,7 @@ fn main() {
         Ok(nodes) => nodes,
     };
 
-    let _cache_state = match data::invalidate_cache(&vault_content) {
+    let _cache_state = match data::invalidate_cache(&vault_content, &vault_path, &cache) {
         Err(e) => {
             log::error!("Error in invalidation: {}", e);
             std::process::exit(1);

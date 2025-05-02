@@ -1,14 +1,14 @@
-use crate::config::{self, AppConfig};
+use crate::config;
 use crate::util;
 
+use rusqlite::Connection;
 use serde::Deserialize;
 use std::{
     env,
     error::Error,
-    fmt,
-    fs::File,
+    fmt, fs,
     io::{BufRead, BufReader},
-    path::{Path, PathBuf},
+    path::{Path, PathBuf, StripPrefixError},
 };
 use walkdir::{DirEntry, WalkDir};
 
@@ -41,10 +41,10 @@ fn get_local_data_dir() -> Option<PathBuf> {
     }
 }
 
-pub fn get_data_path(config: &AppConfig) -> Result<PathBuf, Box<dyn Error>> {
+pub fn get_data_path(config: &config::AppConfig) -> Result<PathBuf, Box<dyn Error>> {
     let mut data_path = get_local_data_dir()
         .ok_or_else(|| -> Box<dyn Error> { Box::from("Local data folder not found.") })?;
-    let root_workspace_path = config::get_root_workspace_path(&config)
+    let root_workspace_path = config::get_root_workspace_path(config)
         .ok_or("Failed to get Root Workspace Path from Config.")?;
 
     let file_name_os_str = root_workspace_path
@@ -80,9 +80,7 @@ impl fmt::Display for NodeData {
         let mut output_parts = Vec::new();
 
         if let Some(id) = &self.id {
-            if !id.exists() {
-                output_parts.push(format!("ID: {}", id.to_string_lossy()));
-            }
+            output_parts.push(format!("ID: {}", id.to_string_lossy()));
         }
 
         if let Some(front_matter) = &self.front_matter {
@@ -161,7 +159,7 @@ pub fn traverse_vault(vault_path: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>>
 }
 
 pub fn parse_yaml_front_matter(file_path: &Path) -> Result<Option<FrontMatter>, Box<dyn Error>> {
-    let file = File::open(file_path)
+    let file = fs::File::open(file_path)
         .map_err(|e| format!("Error opening file '{}': {}", file_path.display(), e))?;
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
@@ -245,15 +243,43 @@ pub fn parse_yaml_front_matter(file_path: &Path) -> Result<Option<FrontMatter>, 
 }
 
 /// Check to see if caching database exists
-fn cache_exists() {}
-
-/// Build cache with the files in the vault
-fn build_cache() {}
+pub fn get_cache(data_path: &Path) -> Result<Connection, rusqlite::Error> {
+    if fs::create_dir_all(data_path).is_err() {}
+    let mut cache_path = data_path.to_owned(); // Clones automatically
+    cache_path.push("cache.db3");
+    let _conn = match Connection::open(cache_path) {
+        Err(e) => {
+            log::error!("Problem creating database: {}", e);
+            return Err(e);
+        }
+        Ok(db) => {
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS nodes (
+            id TEXT PRIMARY KEY,
+            address TEXT,
+            title TEXT,
+            github TEXT,
+            created TEXT,
+            tags TEXT,
+            authors TEXT
+            )",
+                [], // No parameters
+            )?;
+            return Ok(db);
+        }
+    };
+}
 
 /// Parse through entries in database to see if all are present
-pub fn invalidate_cache(nodes: &Vec<PathBuf>) -> Result<(), Box<dyn Error>> {
+pub fn invalidate_cache(
+    nodes: &Vec<PathBuf>,
+    vault_path: &Path,
+    cache: &Connection,
+) -> Result<(), Box<dyn Error>> {
     for node in nodes {
-        if !exists_in_cache(node) {
+        let entry = util::get_relative_path(node, vault_path)?;
+        let existance = exists_in_cache(&entry, cache)?;
+        if !existance {
             add_to_cache(node)?;
         } else {
             update_in_cache(node)?;
@@ -263,19 +289,19 @@ pub fn invalidate_cache(nodes: &Vec<PathBuf>) -> Result<(), Box<dyn Error>> {
 }
 
 /// Exists in cache?
-fn exists_in_cache(entry: &Path) -> bool {
-    true
+fn exists_in_cache(_entry: &Path, _cache: &Connection) -> Result<bool, StripPrefixError> {
+    return Ok(true);
 }
 
 /// Add entry to cache
-fn add_to_cache(entry: &Path) -> Result<(), Box<dyn Error>> {
+fn add_to_cache(_entry: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
 /// Remove entry from cache
-fn remove_from_cache() {}
+fn _remove_from_cache() {}
 
 /// Update entry in cache
-fn update_in_cache(entry: &Path) -> Result<(), Box<dyn Error>> {
+fn update_in_cache(_entry: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }

@@ -7,7 +7,7 @@ pub fn run_watcher(vault_path: &PathBuf) -> Result<(), Box<dyn Error>> {
     let (tx, rx) = std::sync::mpsc::channel();
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
 
-    watcher.watch(&vault_path, RecursiveMode::Recursive)?;
+    watcher.watch(vault_path, RecursiveMode::Recursive)?;
     log::info!("Successfully watching path: {:?}", vault_path);
 
     for res in rx {

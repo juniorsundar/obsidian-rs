@@ -1,7 +1,7 @@
 use crate::config;
 use crate::util;
 
-use rusqlite::Connection;
+use sqlite::{Connection, Error as SqliteError};
 use serde::Deserialize;
 use std::{
     env,
@@ -243,18 +243,24 @@ pub fn parse_yaml_front_matter(file_path: &Path) -> Result<Option<FrontMatter>, 
 }
 
 /// Check to see if caching database exists
-pub fn get_cache(data_path: &Path) -> Result<Connection, rusqlite::Error> {
+pub fn get_cache(data_path: &Path) -> Result<Connection, SqliteError> {
     if fs::create_dir_all(data_path).is_err() {}
     let mut cache_path = data_path.to_owned(); // Clones automatically
     cache_path.push("cache.db3");
-    let _conn = match Connection::open(cache_path) {
+    let db = match sqlite::open(&cache_path) {
         Err(e) => {
-            log::error!("Problem creating database: {}", e);
+            log::error!(
+                "Problem opening or creating database {}: {}",
+                cache_path.display(),
+                e
+            );
             return Err(e);
         }
-        Ok(db) => {
-            db.execute(
-                "CREATE TABLE IF NOT EXISTS nodes (
+        Ok(connection) => connection,
+    };
+
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS nodes (
             id TEXT PRIMARY KEY,
             address TEXT,
             title TEXT,
@@ -262,12 +268,10 @@ pub fn get_cache(data_path: &Path) -> Result<Connection, rusqlite::Error> {
             created TEXT,
             tags TEXT,
             authors TEXT
-            )",
-                [], // No parameters
-            )?;
-            return Ok(db);
-        }
-    };
+        )",
+    )?;
+
+    Ok(db)
 }
 
 /// Parse through entries in database to see if all are present
